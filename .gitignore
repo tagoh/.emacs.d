@@ -1,3 +1,4 @@
+*~
 *.bak
 *.data
 *.db
@@ -76,7 +77,6 @@ rime/
 rust-playground/
 server/
 session*
-site-lisp/
 snippets/
 tabspaces/
 templates/
