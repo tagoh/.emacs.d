@@ -38,12 +38,15 @@ in current buffer.  Otherwise tries to ask a License text at minibuffer."
                     (buffer-substring (region-beginning) (region-end))
                   (read-from-minibuffer "License text: "))))
         (buf (get-buffer-create "* license-validate process *")))
+    (license-validate-posframe-check-position)
     (make-process
      :name "license-validate"
      :buffer buf
      :command (list "license-validate" text)
      :sentinel '(lambda (process event)
                   (save-match-data
+                    (if (use-region-p)
+                        (deactivate-mark))
                     (cond ((string= "finished\n" event)
                            (message "Validating license... OK!"))
                           ((string-match "\\(deleted\\|exited\\|failed\\|signal\\|connection\\).*" event)
@@ -57,8 +60,8 @@ in current buffer.  Otherwise tries to ask a License text at minibuffer."
                       (delete-process process)
                       (posframe-show "* license-validate *"
                                      :string text
-                                     :hidehandler #'license-validate-posframe-hidehandler)))))
-    (message "Validating license...")))
+                                     :foreground-color "red"
+                                     :hidehandler #'license-validate-posframe-hidehandler)))))))
 
 (defun license-convert (&optional string)
   "Convert Fedora-specific License Identifier to SPDX.
@@ -74,38 +77,42 @@ replace Fedora License Identifier to SPDX License Identifier."
                     (buffer-substring (region-beginning) (region-end))
                   (read-from-minibuffer "License text to convert: "))))
         (buf (get-buffer-create "* license-convert process *")))
+    (license-validate-posframe-check-position)
     (make-process
      :name "license-convert"
      :buffer buf
      :command (list "license-fedora2spdx" text)
-     :sentinel '(lambda (process event)
-                  (let* ((buf (get-buffer "* license-convert process *"))
-                         (result (with-current-buffer buf
-                                   (buffer-string))))
-                    (save-match-data
-                      (cond ((string= "finished\n" event)
-                             (message "Converting license... done!")
-                             (if (string-match "Warning" result)
-				                 (message "Converting license... warning!")
-                               (posframe-show "* license-convert *"
-                                              :string result
-                                              :hidehandler #'license-validate-posframe-hidehandler)
-                               (let ((r (replace-regexp-in-string "\n$" "" result)))
-                                 (if (use-region-p)
-                                     (if (y-or-n-p (format "Do you want to replace '%s' to '%s'? " text r))
-                                         (save-excursion
-                                           (delete-region (region-beginning) (region-end))
-                                           (deactivate-mark)
-                                           (insert r))
-                                       (message "Converting license... canceled")))
-                                 (message r))))
-                            ((string-match "\\(deleted\\|exited\\|failed\\|signal\\|connection\\).*" event)
-                             (message "Converting license... failed!!")
-                             (posframe-show "* license-convert *"
-                                            :string result
-                                            :hidehandler #'license-validate-posframe-hidehandler))))
-                    (set-process-sentinel process nil)
-                    (kill-buffer buf)
-                    (delete-process process))))))
+     :sentinel (lambda (process event)
+                 (let* ((buf (get-buffer "* license-convert process *"))
+                        (result (with-current-buffer buf
+                                  (buffer-string))))
+                   (save-match-data
+                     (cond ((string= "finished\n" event)
+                            (message "Converting license... done!")
+                            (if (string-match "Warning" result)
+                                (progn
+				                  (message "Converting license... warning!")
+                                  (posframe-show "* license-convert *"
+                                                 :string result
+                                                 :foreground-color "red"
+                                                 :hidehandler #'license-validate-posframe-hidehandler))
+                              (let ((r (replace-regexp-in-string "\n$" "" result)))
+                                (if (use-region-p)
+                                    (if (y-or-n-p (format "Do you want to replace '%s' to '%s'? " text r))
+                                        (save-excursion
+                                          (delete-region (region-beginning) (region-end))
+                                          (deactivate-mark)
+                                          (insert r))
+                                      (message "Converting license... canceled"))
+                                  (message r)))))
+                           ((string-match "\\(deleted\\|exited\\|failed\\|signal\\|connection\\).*" event)
+                            (message "Converting license... failed!!")
+                            (posframe-show "* license-convert *"
+                                           :string result
+                                           :foreground-color "red"
+                                           :hidehandler #'license-validate-posframe-hidehandler))))
+                   (set-process-sentinel process nil)
+                   (kill-buffer buf)
+                   (delete-process process))))))
 
 (provide 'fedora-license)
