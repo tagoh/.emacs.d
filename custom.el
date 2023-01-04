@@ -129,6 +129,7 @@ for the image type)."
 (blink-cursor-mode -1)
 ;(cua-mode)
 (savehist-mode t)
+(setq default-input-method "japanese-anthy-unicode")
 
 ;; cc-mode
 (defun my-c-mode-common-hook ()
