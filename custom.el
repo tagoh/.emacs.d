@@ -17,7 +17,7 @@
 ;; (setq centaur-dashboard nil)                   ; Display dashboard at startup or not: t or nil
 ;; (setq centaur-restore-frame-geometry nil)      ; Restore the frame's geometry at startup: t or nil
 ;; (setq centaur-lsp 'eglot)                      ; Set LSP client: lsp-mode, eglot or nil
-;; (setq centaur-lsp-format-disable-on-save t)    ; disable the on save formatting for all files
+(setq centaur-lsp-format-on-save t)            ; Auto format buffers on save: t or nil
 ;; (setq centaur-lsp-format-on-save-ignore-modes '(c-mode c++-mode python-mode markdown-mode)) ; Ignore format on save for some languages
 ;; (setq centaur-tree-sitter t)                   ; Enable `tree-sitter' or not: t or nil
 ;; (setq centaur-chinese-calendar t)              ; Support Chinese calendar or not: t or nil
@@ -122,6 +122,12 @@ for the image type)."
 ;; (when (and (> (length (display-monitor-attributes-list)) 1)
 ;;            (> (display-pixel-width) 1920))
 ;;   (set-frame-parameter nil 'left 1920))
+;; (if window-system
+;;     (progn
+;;       (if (> (display-pixel-width) 1920)
+;;           (set-frame-width nil (/ (display-pixel-width) 4)))
+;;       (set-frame-height nil (display-pixel-height))))
+(set-frame-parameter nil 'left 0)
 
 (setq kill-whole-line t)
 (setq user-mail-address "akira@tagoh.org")
