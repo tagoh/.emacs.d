@@ -140,7 +140,7 @@ Avoid placing large files like EAF in `site-lisp` to prevent slow startup."
 (require 'init-player)
 (require 'init-utils)
 
-(require 'init-tabs)
+;;(require 'init-tabs)
 
 ;; Programming
 (require 'init-vcs)
