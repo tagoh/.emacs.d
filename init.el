@@ -133,7 +133,7 @@ as recursive scanning slows down startup."
 (require 'init-player)
 (require 'init-utils)
 
-(require 'init-tabs)
+;;(require 'init-tabs)
 
 ;; Programming
 (require 'init-vc)
