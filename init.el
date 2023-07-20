@@ -140,7 +140,7 @@ Otherwise the startup will be very slow."
 (require 'init-player)
 (require 'init-utils)
 
-(require 'init-tabs)
+;;(require 'init-tabs)
 
 ;; Programming
 (require 'init-vcs)
