@@ -15,11 +15,10 @@
 ;; (setq centaur-theme 'auto)                     ; Color theme: auto, random, system, default, pro, dark, light, warm, cold, day or night
 ;; (setq centaur-completion-style 'minibuffer)    ; Completion display style: minibuffer or childframe
 ;; (setq centaur-dashboard nil)                   ; Display dashboard at startup or not: t or nil
-;; (setq centaur-restore-frame-geometry nil)      ; Restore the frame's geometry at startup: t or nil
-;; (setq centaur-lsp 'eglot)                      ; Set LSP client: lsp-mode, eglot or nil
-(setq centaur-lsp-format-on-save t)            ; Auto format buffers on save: t or nil
+;; (setq centaur-lsp 'lsp-mode)                   ; Set LSP client: lsp-mode, eglot or nil
+;; (setq centaur-lsp-format-on-save t)            ; Auto format buffers on save: t or nil
 ;; (setq centaur-lsp-format-on-save-ignore-modes '(c-mode c++-mode python-mode markdown-mode)) ; Ignore format on save for some languages
-;; (setq centaur-tree-sitter t)                   ; Enable `tree-sitter' or not: t or nil
+;; (setq centaur-tree-sitter nil)                 ; Enable tree-sitter or not: t or nil. Only available in 29+.
 ;; (setq centaur-chinese-calendar t)              ; Support Chinese calendar or not: t or nil
 ;; (setq centaur-player t)                        ; Enable players or not: t or nil
 ;; (setq centaur-prettify-symbols-alist nil)      ; Alist of symbol prettifications. Nil to use font supports ligatures.
@@ -36,12 +35,12 @@ The value is a symbol specifying the image type, or nil if type
 cannot be determined (or if Emacs doesn't have built-in support
 for the image type)."
   (let ((case-fold-search t)
-        type)
-    (catch 'found
-      (dolist (elem image-type-file-name-regexps)
-	    (when (and (string-match-p (car elem) file)
-                   (image-type-available-p (setq type (cdr elem))))
-	      (throw 'found type))))))
+   type)
+   (catch 'found
+   (dolist (elem image-type-file-name-regexps)
+	 (when (and (string-match-p (car elem) file)
+      (image-type-available-p (setq type (cdr elem))))
+	 (throw 'found type))))))
 
 ;; Fonts
 (defun centaur-setup-fonts ()
@@ -86,11 +85,12 @@ for the image type)."
                       (set-fontset-font t 'emoji (font-spec :family font) nil 'prepend))))
 
     ;; Specify font for Chinese characters
-    (cl-loop for font in '("WenQuanYi Micro Hei" "PingFang SC" "Microsoft Yahei" "STFangsong")
+    (cl-loop for font in '("LXGW Neo Xihei" "WenQuanYi Micro Hei Mono" "LXGW WenKai Screen"
+                           "LXGW WenKai Mono" "PingFang SC" "Microsoft Yahei UI" "Simhei")
              when (font-installed-p font)
              return (progn
                       (setq face-font-rescale-alist `((,font . 1.3)))
-                      (set-fontset-font t '(#x4e00 . #x9fff) (font-spec :family font))))))
+                      (set-fontset-font t 'han (font-spec :family font))))))
 
 (centaur-setup-fonts)
 (add-hook 'window-setup-hook #'centaur-setup-fonts)
@@ -122,6 +122,11 @@ for the image type)."
 ;; (when (and (> (length (display-monitor-attributes-list)) 1)
 ;;            (> (display-pixel-width) 1920))
 ;;   (set-frame-parameter nil 'left 1920))
+
+;; (put 'cl-destructuring-bind 'lisp-indent-function 'defun)
+;; (put 'pdf-view-create-image 'lisp-indent-function 'defun)
+;; (put 'treemacs-create-theme 'lisp-indent-function 'defun)
+
 ;; (if window-system
 ;;     (progn
 ;;       (if (> (display-pixel-width) 1920)
@@ -226,14 +231,10 @@ for the image type)."
 		        (template-args-cont c-lineup-template-args +))))
 (add-hook 'c-mode-common-hook 'my-c-mode-common-hook)
 
-;; all-the-icons
-(eval-after-load 'all-the-icons
-  '(add-to-list 'all-the-icons-extension-icon-alist
-		        '("xz" all-the-icons-octicon "file-binary" :v-adjust 0.0 :face all-the-icons-lmaroon)))
-
-;; company
-(eval-after-load 'company
-  '(add-to-list 'company-backends 'company-irony))
+;; nerd-icons
+(eval-after-load 'nerd-icons
+  '(add-to-list 'nerd-icons-extension-icon-alist
+                '("xz" nerd-icons-octicon "nf-oct-file_binary" :face nerd-icons-lmaroon)))
 
 ;; galign
 (add-hook 'c-mode-common-hook
@@ -244,23 +245,23 @@ for the image type)."
 (eval-after-load 'lsp-ui
   '(load "lsp-mode-imenu-show-focus"))
 
-;; irony
-(eval-after-load 'irony
-  '(progn
-     (add-hook 'c-mode-hook 'irony-mode)
-     (add-hook 'c++-mode-hook 'irony-mode)
-     (add-hook 'objc-mode-hook 'irony-mode)
-     (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options)))
+;; ;; irony
+;; (eval-after-load 'irony
+;;   '(progn
+;;      (add-hook 'c-mode-hook 'irony-mode)
+;;      (add-hook 'c++-mode-hook 'irony-mode)
+;;      (add-hook 'objc-mode-hook 'irony-mode)
+;;      (add-hook 'irony-mode-hook 'irony-cdb-autosetup-compile-options)))
 
 ;; license
 (require 'fedora-license)
 (global-set-key (kbd "C-c M-l") 'license-validate-map)
 
 ;; projectile
-(eval-after-load 'projectile
-  '(progn
-     (setq projectile-generic-command "rg -L --files . | cut -c3- | tr '\\n' '\\0'"
-           projectile-enable-caching t)))
+;; (eval-after-load 'projectile
+;;   '(progn
+;;      (setq projectile-generic-command "rg -L --files . | cut -c3- | tr '\\n' '\\0'"
+;;            projectile-enable-caching t)))
 
 ;; rpm-spec-mode
 (setq rpm-spec-user-mail-address "tagoh@redhat.com")
@@ -273,7 +274,7 @@ for the image type)."
 	   :ensure t
 	   :bind
 	   (:map prog-mode-map
-	    ("C-c C-i" . spdx-insert-spdx-copyright))
+	    ("C-c M-l i" . spdx-insert-spdx-copyright))
 	   :custom
 	   (spdx-copyright-holder 'auto)
 	   (spdx-project-detection 'auto))))
@@ -284,7 +285,8 @@ for the image type)."
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(browse-url-browser-function 'browse-url-chrome)
- '(browse-url-chrome-program "google-chrome"))
+ '(browse-url-chrome-program "google-chrome")
+ '(safe-local-variable-values '((indent-tab-mode))))
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
