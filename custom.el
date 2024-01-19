@@ -18,7 +18,7 @@
 ;; (setq centaur-lsp 'lsp-mode)                   ; Set LSP client: lsp-mode, eglot or nil
 ;; (setq centaur-lsp-format-on-save t)            ; Auto format buffers on save: t or nil
 ;; (setq centaur-lsp-format-on-save-ignore-modes '(c-mode c++-mode python-mode markdown-mode)) ; Ignore format on save for some languages
-;; (setq centaur-tree-sitter nil)                 ; Enable tree-sitter or not: t or nil. Only available in 29+.
+(setq centaur-tree-sitter nil)                 ; Enable tree-sitter or not: t or nil. Only available in 29+.
 ;; (setq centaur-chinese-calendar t)              ; Support Chinese calendar or not: t or nil
 ;; (setq centaur-player t)                        ; Enable players or not: t or nil
 ;; (setq centaur-prettify-symbols-alist nil)      ; Alist of symbol prettifications. Nil to use font supports ligatures.
@@ -132,7 +132,7 @@ for the image type)."
 ;;       (if (> (display-pixel-width) 1920)
 ;;           (set-frame-width nil (/ (display-pixel-width) 4)))
 ;;       (set-frame-height nil (display-pixel-height))))
-(set-frame-parameter nil 'left 0)
+;;(set-frame-parameter nil 'left 0)
 
 (setq kill-whole-line t)
 (setq user-mail-address "akira@tagoh.org")
@@ -255,7 +255,7 @@ for the image type)."
 
 ;; license
 (require 'fedora-license)
-(global-set-key (kbd "C-c M-l") 'license-validate-map)
+(define-key prog-mode-map (kbd "C-c M-l") license-validate-map)
 
 ;; projectile
 ;; (eval-after-load 'projectile
@@ -268,16 +268,10 @@ for the image type)."
 (setq rpm-spec-user-full-name "Akira TAGOH")
 
 ;; spdx
-(eval-after-load 'use-package
-  '(progn
-     (use-package "spdx"
-	   :ensure t
-	   :bind
-	   (:map prog-mode-map
-	    ("C-c M-l i" . spdx-insert-spdx-copyright))
-	   :custom
-	   (spdx-copyright-holder 'auto)
-	   (spdx-project-detection 'auto))))
+(with-eval-after-load 'init-package
+  (define-key license-validate-map (kbd "i") #'spdx-insert-spdx-copyright)
+  (setq spdx-copyright-holder 'auto)
+  (setq spdx-project-detection 'auto))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
