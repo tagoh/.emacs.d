@@ -279,7 +279,7 @@ for the image type)."
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(browse-url-browser-function 'browse-url-chrome)
- '(browse-url-chrome-program "google-chrome")
+ '(browse-url-chrome-program "chrome")
  '(safe-local-variable-values '((indent-tab-mode))))
 
 (custom-set-faces
