@@ -255,7 +255,7 @@ for the image type)."
 
 ;; license
 (require 'fedora-license)
-(define-key prog-mode-map (kbd "C-c M-l") license-validate-map)
+(global-set-key (kbd "C-c M-l") license-validate-map)
 
 ;; projectile
 ;; (eval-after-load 'projectile
@@ -280,7 +280,7 @@ for the image type)."
  ;; If there is more than one, they won't work right.
  '(browse-url-browser-function 'browse-url-chrome)
  '(browse-url-chrome-program "google-chrome")
- '(safe-local-variable-values '((indent-tab-mode))))
+ '(safe-local-variable-values '((encoding . utf-8) (indent-tab-mode))))
 
 (custom-set-faces
  ;; custom-set-faces was added by Custom.
