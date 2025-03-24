@@ -117,7 +117,8 @@
     :init (setq vterm-always-compile-module t))
 
   (use-package multi-vterm
-    :bind ("C-<f9>" . multi-vterm)
+    :bind (("C-<f9>" . multi-vterm)
+           ("S-<f9>" . multi-vterm-project))
     :custom (multi-vterm-buffer-name "vterm")
     :config
     (with-no-warnings
