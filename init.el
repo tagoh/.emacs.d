@@ -161,5 +161,7 @@ Avoid placing large files like EAF in `site-lisp` to prevent slow startup."
 (require 'init-elixir)
 (require 'init-web)
 
+(require 'init-ai)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; init.el ends here
