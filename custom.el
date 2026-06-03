@@ -36,12 +36,12 @@ The value is a symbol specifying the image type, or nil if type
 cannot be determined (or if Emacs doesn't have built-in support
 for the image type)."
   (let ((case-fold-search t)
-   type)
-   (catch 'found
-   (dolist (elem image-type-file-name-regexps)
-	 (when (and (string-match-p (car elem) file)
-      (image-type-available-p (setq type (cdr elem))))
-	 (throw 'found type))))))
+        type)
+    (catch 'found
+      (dolist (elem image-type-file-name-regexps)
+	    (when (and (string-match-p (car elem) file)
+                   (image-type-available-p (setq type (cdr elem))))
+	      (throw 'found type))))))
 
 ;; Fonts
 (defun centaur-setup-fonts ()
@@ -274,6 +274,72 @@ for the image type)."
   (define-key license-validate-map (kbd "i") #'spdx-insert-spdx-copyright)
   (setq spdx-copyright-holder 'auto)
   (setq spdx-project-detection 'auto))
+
+;; magit
+(with-eval-after-load 'magit
+  (defun my/magit-worktree-ensure-tabspace ()
+    (when (and (derived-mode-p 'magit-mode)
+               default-directory
+               (not (bound-and-true-p my/in-tabspace-switching)))
+      (let* ((project-root (expand-file-name default-directory))
+             (current-tab-name (alist-get 'name (tab-bar--current-tab)))
+             (expected-tab-name (file-name-nondirectory (directory-file-name project-root))))
+        (when (and expected-tab-name
+                   (not (string= current-tab-name expected-tab-name)))
+          (let ((my/in-tabspace-switching t))
+            (when (fboundp 'project-forget-project)
+              (project-forget-project project-root))
+
+            (let ((all-tabs (mapcar (lambda (tab) (alist-get 'name tab))
+                                    (funcall tab-bar-tabs-function))))
+              (if (member expected-tab-name all-tabs)
+                  (tab-bar-switch-to-tab expected-tab-name)
+                (tab-bar-new-tab)
+                (tab-bar-rename-tab expected-tab-name)))
+
+            (setq-local project-current-directory project-root))))))
+  (add-hook 'magit-post-display-buffer-hook #'my/magit-worktree-ensure-tabspace))
+
+(with-eval-after-load 'magit-worktree
+  (defun my/magit-worktree-delete-and-clean-tab (orig-fun &rest args)
+    (let* ((current-tab (tab-bar--current-tab))
+           (current-tab-name (alist-get 'name current-tab))
+           (all-tabs (mapcar (lambda (tab) (alist-get 'name tab)) (funcall tab-bar-tabs-function)))
+           (remaining-tabs (cl-remove current-tab-name all-tabs :test #'string=))
+           (fallback-tab (or (car (cl-remove "Default" remaining-tabs :test #'string=))
+                             (car remaining-tabs))))
+
+      (apply orig-fun args)
+      (when (and current-tab-name (not (string= current-tab-name "Default")))
+        (tab-bar-close-tab-by-name current-tab-name)
+        (when fallback-tab
+          (tab-bar-switch-to-tab fallback-tab)
+          (magit-refresh)))))
+
+  (advice-add 'magit-worktree-delete :around #'my/magit-worktree-delete-and-clean-tab))
+
+;; tabspaces
+(setq tabspaces-use-filters t
+      tabspaces-use-filtered-buffers-as-default t)
+
+(defun my/tabspaces-kill-buffers-before-close (tab)
+  (let* ((name (cdr (assq 'name tab)))
+         (unless (string= name "Default")
+           (let* ((tabs (funcall tab-bar-tabs-function))
+                  (tab-index (cl-position-if (lambda (t-obj) (string= (alist-get 'name t-obj) name)) tabs))
+                  (buffers (if tab-index
+                               (tabspaces--buffer-list nil (1+ tab-index))
+                             (tabspaces--buffer-list))))
+             (dolist (buf buffers)
+               (when (buffer-live-p buf)
+                 (let ((buf-name (buffer-name buf)))
+                   (unless (member buf-name '("*scratch*", "*Messages*"))
+                     (kill-buffer buf))))))))))
+
+(add-hook 'tab-bar-tab-prevent-close-functions
+          (lambda (tab arg)
+            (my/tabspaces-kill-buffers-before-close tab)
+            nil))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
