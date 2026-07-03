@@ -60,20 +60,18 @@ for the image type)."
                                                       (t 100))))
 
     ;; Set mode-line font
-    ;; (cl-loop for font in '("SF Mono" "Menlo" "SF Pro Display" "Helvetica")
+    ;; (cl-loop for font in '("Arial" "Helvetica" "Times New Roman")
     ;;          when (font-available-p font)
     ;;          return (progn
-    ;;                   (set-face-attribute 'mode-line nil :family font :height 120)
-    ;;                   (when (facep 'mode-line-active)
-    ;;                     (set-face-attribute 'mode-line-active nil :family font :height 120))
-    ;;                   (set-face-attribute 'mode-line-inactive nil :family font :height 120)))
+    ;;                   (set-face-attribute 'mode-line nil :family font :inherit 'variable-pitch)
+    ;;                   (set-face-attribute 'mode-line-inactive nil :family font :inherit 'variable-pitch)))
 
     ;; Specify font for all unicode characters
     (cl-loop for font in '("Apple Symbols" "Segoe UI Symbol" "Symbola" "Symbol")
              when (font-available-p font)
              return (set-fontset-font t 'symbol (font-spec :family font) nil 'prepend))
 
-    ;; Emoji
+    ;; Specify font for Emoji characters
     (cl-loop for font in '("Noto Color Emoji" "Apple Color Emoji" "Segoe UI Emoji")
              when (font-available-p font)
              return (set-fontset-font t 'emoji (font-spec :family font) nil 'prepend))
@@ -109,6 +107,7 @@ for the image type)."
 ;; Misc.
 ;; (setq confirm-kill-emacs 'y-or-n-p)
 ;; (setq package-check-signature nil)
+;; (setq trusted-content ':all)
 
 ;; Enable proxy
 ;; (enable-http-proxy)
@@ -123,6 +122,24 @@ for the image type)."
 ;; (put 'pdf-view-create-image 'lisp-indent-function 'defun)
 ;; (put 'treemacs-create-theme 'lisp-indent-function 'defun)
 
+;; For compat
+;; (add-hook 'emacs-lisp-mode-hook
+;;           (defun compat-add-to-imenu ()
+;;             "Add to imenu list."
+;;             (add-to-list
+;;              'imenu-generic-expression
+;;              '(nil
+;;                "^\\s-*(\\(compat-def\\(?:un\\|macro\\|alias\\)\\)\\s-+\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)"
+;;                2))
+;;             (add-to-list
+;;              'imenu-generic-expression
+;;              '("Packages" "^\\s-*(\\(compat-require\\)\\s-+\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)" 2))
+;;             (add-to-list
+;;              'imenu-generic-expression
+;;              '("Variables"
+;;                "^\\s-*(\\(compat-def\\(?:var\\|const\\)\\)?\\s-+\\(\\(?:\\w\\|\\s_\\|\\\\.\\)+\\)[[:space:]\n]+[^)]"
+;;                2))))
+
 ;; (if window-system
 ;;     (progn
 ;;       (if (> (display-pixel-width) 1920)
@@ -132,9 +149,9 @@ for the image type)."
 
 (setq kill-whole-line t)
 (setq user-mail-address "akira@tagoh.org")
-;(menu-bar-mode 1)
+                                        ;(menu-bar-mode 1)
 (blink-cursor-mode -1)
-;(cua-mode)
+                                        ;(cua-mode)
 (savehist-mode t)
 (setq default-input-method "japanese-anthy-unicode")
 
