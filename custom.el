@@ -16,7 +16,7 @@
 ;; (setq centaur-theme 'auto)                     ; Color theme: auto, random, system, default, pro, dark, light, warm, cold, day or night
 ;; (setq centaur-completion-style 'minibuffer)    ; Completion display style: minibuffer or childframe
 (setq centaur-frame-maximized-on-startup nil)  ; Maximize frame on startup or not: t or nil
-;; (setq centaur-dashboard nil)                   ; Display dashboard at startup or not: t or nil
+(setq centaur-dashboard nil)                   ; Display dashboard at startup or not: t or nil
 ;; (setq centaur-lsp 'lsp-mode)                   ; Set LSP client: lsp-mode, eglot or nil
 ;; (setq centaur-lsp-format-on-save t)            ; Auto format buffers on save: t or nil
 ;; (setq centaur-lsp-format-on-save-ignore-modes '(c-mode c++-mode python-mode markdown-mode)) ; Ignore format on save for some languages
@@ -292,72 +292,291 @@ for the image type)."
   (setq spdx-copyright-holder 'auto)
   (setq spdx-project-detection 'auto))
 
-;; magit
+;; ============================================================================
+;; Git-aware tabspaces integration
+;; ============================================================================
+;; Automatically creates and manages tabspaces sessions for git repositories
+;; and worktrees with naming format: "project@branch"
+
+;; Helper functions
+(defun my/get-all-tab-names ()
+  "Get list of all tab names."
+  (mapcar (lambda (tab) (alist-get 'name tab))
+          (funcall tab-bar-tabs-function)))
+
+(defun my/get-current-tab-name ()
+  "Get current tab name."
+  (alist-get 'name (tab-bar--current-tab)))
+
+(defun my/find-tab-index (tab-name)
+  "Find the index of tab with TAB-NAME."
+  (cl-position-if
+   (lambda (tab) (string= (alist-get 'name tab) tab-name))
+   (funcall tab-bar-tabs-function)))
+
+(defun my/is-system-buffer-p (buffer-name)
+  "Return t if BUFFER-NAME is a system buffer."
+  (or (member buffer-name '("*scratch*" "*Messages*"))
+      (string-prefix-p " *Minibuf" buffer-name)))
+
+(defun my/switch-or-create-tab (tab-name project-root)
+  "Switch to existing tab TAB-NAME or create new one for PROJECT-ROOT."
+  (if (member tab-name (my/get-all-tab-names))
+      (tab-bar-switch-to-tab tab-name)
+    (tab-bar-new-tab)
+    (tab-bar-rename-tab tab-name)
+    (add-to-list 'tabspaces-project-tab-map (cons project-root tab-name))))
+
+(defun my/kill-worktree-buffers (project-root)
+  "Kill all buffers associated with PROJECT-ROOT worktree."
+  (let ((worktree-name (file-name-nondirectory
+                        (directory-file-name project-root))))
+    (dolist (buf (buffer-list))
+      (when (buffer-live-p buf)
+        (let ((buf-file (buffer-file-name buf))
+              (buf-dir (ignore-errors
+                         (buffer-local-value 'default-directory buf)))
+              (buf-name (buffer-name buf)))
+          ;; Kill buffers from deleted worktree (but not system buffers)
+          (when (and (not (my/is-system-buffer-p buf-name))
+                     (or (and buf-file
+                              (string-prefix-p project-root
+                                               (expand-file-name buf-file)))
+                         (and buf-dir
+                              (string-prefix-p project-root
+                                               (expand-file-name buf-dir)))
+                         (and (string-prefix-p " *Old buffer" buf-name)
+                              (string-match-p (regexp-quote worktree-name)
+                                              buf-name))))
+            (kill-buffer buf)))))))
+
+(defun my/get-git-project-name ()
+  "Get project name from git remote URL or directory name.
+Works for both regular repos and worktrees."
+  (when (and (fboundp 'magit-get) (fboundp 'magit-gitdir))
+    (or
+     ;; Try to extract from remote URL
+     (when-let ((remote-url (magit-get "remote.origin.url")))
+       (cond
+        ;; SSH: git@github.com:user/project.git
+        ((string-match ":\\([^/]+\\)/\\([^/\\.]+\\)\\(\\.git\\)?$" remote-url)
+         (match-string 2 remote-url))
+        ;; HTTPS: https://github.com/user/project.git
+        ((string-match "/\\([^/\\.]+\\)\\(\\.git\\)?$" remote-url)
+         (match-string 1 remote-url))))
+     ;; Fallback to repository directory name
+     (when-let ((git-dir (magit-gitdir)))
+       (file-name-nondirectory
+        (directory-file-name
+         (if (string-match "/\\.git/?$" git-dir)
+             (replace-regexp-in-string "/\\.git/?$" "" git-dir)
+           default-directory)))))))
+
+(defun my/get-git-branch-name (&optional worktree-path)
+  "Get current git branch name.
+For detached HEAD (e.g., during rebase), tries to infer from git state
+or WORKTREE-PATH directory name."
+  (let ((default-directory (or worktree-path default-directory)))
+    (or
+     ;; Try normal branch name
+     (and (fboundp 'magit-get-current-branch)
+          (magit-get-current-branch))
+     ;; If rebasing, get branch from rebase state
+     (when (file-exists-p ".git/rebase-merge/head-name")
+       (let ((head-name (with-temp-buffer
+                          (insert-file-contents ".git/rebase-merge/head-name")
+                          (string-trim (buffer-string)))))
+         (when (string-match "refs/heads/\\(.+\\)" head-name)
+           (match-string 1 head-name))))
+     ;; Extract from worktree directory name: "main_branch-name" -> "branch-name"
+     (when worktree-path
+       (let ((dir-name (file-name-nondirectory
+                        (directory-file-name worktree-path))))
+         (when (string-match "^[^_]+_\\(.+\\)$" dir-name)
+           (match-string 1 dir-name)))))))
+
+(defun my/get-git-tab-name (&optional worktree-path)
+  "Get tab name in 'project@branch' format.
+Optional WORKTREE-PATH for worktree-specific branch detection."
+  (let* ((default-directory (or worktree-path default-directory))
+         (project-name (my/get-git-project-name))
+         (branch-name (my/get-git-branch-name worktree-path)))
+    (if (and project-name branch-name)
+        (format "%s@%s" project-name branch-name)
+      (or project-name
+          (file-name-nondirectory
+           (directory-file-name default-directory))))))
+
+;; ============================================================================
+;; Magit integration
+;; ============================================================================
+
 (with-eval-after-load 'magit
   (defun my/magit-worktree-ensure-tabspace ()
+    "Automatically switch to or create tabspace for git worktree in magit buffers."
     (when (and (derived-mode-p 'magit-mode)
                default-directory
-               (not (bound-and-true-p my/in-tabspace-switching)))
+               (not (get-buffer "*tabspaces--placeholder*")))
       (let* ((project-root (expand-file-name default-directory))
-             (current-tab-name (alist-get 'name (tab-bar--current-tab)))
-             (expected-tab-name (file-name-nondirectory (directory-file-name project-root))))
+             (current-tab-name (my/get-current-tab-name))
+             (expected-tab-name (my/get-git-tab-name))
+             (magit-buffer (current-buffer)))
         (when (and expected-tab-name
                    (not (string= current-tab-name expected-tab-name)))
-          (let ((my/in-tabspace-switching t))
-            (when (fboundp 'project-forget-project)
-              (project-forget-project project-root))
+          ;; Switch to or create the appropriate tab
+          (if (member expected-tab-name (my/get-all-tab-names))
+              ;; Switch to existing tab
+              (progn
+                (tab-bar-switch-to-tab expected-tab-name)
+                (switch-to-buffer magit-buffer))
+            ;; Create new tab
+            (tab-bar-new-tab)
+            (tab-bar-rename-tab expected-tab-name)
+            (add-to-list 'tabspaces-project-tab-map
+                         (cons project-root expected-tab-name)))
+          (setq-local project-current-directory project-root)))))
 
-            (let ((all-tabs (mapcar (lambda (tab) (alist-get 'name tab))
-                                    (funcall tab-bar-tabs-function))))
-              (if (member expected-tab-name all-tabs)
-                  (tab-bar-switch-to-tab expected-tab-name)
-                (tab-bar-new-tab)
-                (tab-bar-rename-tab expected-tab-name)))
-
-            (setq-local project-current-directory project-root))))))
   (add-hook 'magit-post-display-buffer-hook #'my/magit-worktree-ensure-tabspace))
 
 (with-eval-after-load 'magit-worktree
-  (defun my/magit-worktree-delete-and-clean-tab (orig-fun &rest args)
-    (let* ((current-tab (tab-bar--current-tab))
-           (current-tab-name (alist-get 'name current-tab))
-           (all-tabs (mapcar (lambda (tab) (alist-get 'name tab)) (funcall tab-bar-tabs-function)))
-           (remaining-tabs (cl-remove current-tab-name all-tabs :test #'string=))
-           (fallback-tab (or (car (cl-remove "Default" remaining-tabs :test #'string=))
-                             (car remaining-tabs))))
+  (defun my/magit-worktree-status-with-tab (orig-fun worktree)
+    "Switch to or create dedicated tabspace when visiting a worktree via 'Z g'."
+    (let* ((worktree-list (if (consp worktree)
+                              worktree
+                            (cl-find-if (lambda (wt) (string= (car wt) worktree))
+                                        (magit-list-worktrees))))
+           (worktree-path (expand-file-name (car worktree-list)))
+           (expected-tab-name
+            (let ((default-directory worktree-path))
+              (my/get-git-tab-name worktree-path)))
+           (current-tab-name (my/get-current-tab-name)))
 
-      (apply orig-fun args)
-      (when (and current-tab-name (not (string= current-tab-name "Default")))
-        (tab-bar-close-tab-by-name current-tab-name)
-        (when fallback-tab
-          (tab-bar-switch-to-tab fallback-tab)
+      ;; If already in correct tab or no expected name, just call original function
+      (if (or (not expected-tab-name)
+              (string= current-tab-name expected-tab-name))
+          (funcall orig-fun worktree)
+        ;; Handle tab switching/creation
+        (if (member expected-tab-name (my/get-all-tab-names))
+            ;; Tab exists: switch and show status
+            (progn
+              (tab-bar-switch-to-tab expected-tab-name)
+              (let ((default-directory worktree-path))
+                (magit-status-setup-buffer)))
+          ;; Tab doesn't exist: create and visit
+          (tab-bar-new-tab)
+          (tab-bar-rename-tab expected-tab-name)
+          (add-to-list 'tabspaces-project-tab-map
+                       (cons worktree-path expected-tab-name))
+          ;; Temporarily remove hook to prevent duplicate tab
+          (remove-hook 'magit-post-display-buffer-hook
+                       #'my/magit-worktree-ensure-tabspace)
+          (unwind-protect
+              (funcall orig-fun worktree)
+            (add-hook 'magit-post-display-buffer-hook
+                      #'my/magit-worktree-ensure-tabspace))))))
+
+  (advice-add 'magit-worktree-status :around #'my/magit-worktree-status-with-tab)
+
+  (defun my/magit-worktree-delete-and-clean-tab (orig-fun &rest args)
+    "Delete worktree and clean up associated tab and buffers."
+    (let ((current-tab-name (my/get-current-tab-name))
+          (project-root (when default-directory
+                          (expand-file-name default-directory))))
+
+      (if (or (not current-tab-name)
+              (string= current-tab-name "Default"))
+          ;; No special tab handling needed
+          (apply orig-fun args)
+
+        ;; Delete worktree and manage tab
+        (apply orig-fun args)
+
+        ;; Clean up buffers associated with the deleted worktree
+        (when project-root
+          (my/kill-worktree-buffers project-root))
+
+        ;; Forget project
+        (when (and project-root (fboundp 'project-forget-project))
+          (project-forget-project project-root))
+
+        ;; Close the tab
+        (when (and current-tab-name
+                   (stringp current-tab-name)
+                   (not (string-empty-p current-tab-name)))
+          (let ((tab-bar-tab-prevent-close-functions nil))
+            (tab-bar-close-tab-by-name current-tab-name)))
+
+        ;; Refresh magit if still in a magit buffer
+        (when (and (derived-mode-p 'magit-mode) (magit-gitdir))
           (magit-refresh)))))
 
   (advice-add 'magit-worktree-delete :around #'my/magit-worktree-delete-and-clean-tab))
 
-;; tabspaces
-(setq tabspaces-use-filters t
-      tabspaces-use-filtered-buffers-as-default t)
+;; ============================================================================
+;; Tabspaces configuration
+;; ============================================================================
+
+(with-eval-after-load 'tabspaces
+  (defun my/tabspaces-generate-descriptive-tab-name-advice
+      (orig-fun project-path existing-tab-names)
+    "Use 'project@branch' format for git repositories."
+    (if (get-buffer "*tabspaces--placeholder*")
+        ;; Don't interfere during session restoration
+        (funcall orig-fun project-path existing-tab-names)
+      (let ((default-directory project-path))
+        (if (and (fboundp 'magit-toplevel)
+                 (condition-case nil (magit-toplevel) (error nil)))
+            ;; Git repository: use project@branch format
+            (let ((tab-name (my/get-git-tab-name)))
+              (add-to-list 'tabspaces-project-tab-map
+                           (cons project-path tab-name))
+              tab-name)
+          ;; Not a git repo: use default behavior
+          (funcall orig-fun project-path existing-tab-names)))))
+
+  (advice-add 'tabspaces-generate-descriptive-tab-name :around
+              #'my/tabspaces-generate-descriptive-tab-name-advice)
+
+  (defun my/tabspaces-cleanup-placeholder-tabs ()
+    "Close placeholder tabs left after session restoration.
+Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
+    (dolist (tab (funcall tab-bar-tabs-function))
+      (let ((tab-name (alist-get 'name tab)))
+        (when (and tab-name
+                   (stringp tab-name)
+                   (string-prefix-p "*tabspaces--" tab-name))
+          (let ((tab-bar-tab-prevent-close-functions nil))
+            (tab-bar-close-tab-by-name tab-name))))))
+
+  (advice-add 'tabspaces-restore-session :after
+              (lambda (&rest _) (my/tabspaces-cleanup-placeholder-tabs))))
 
 (defun my/tabspaces-kill-buffers-before-close (tab)
-  (let* ((name (cdr (assq 'name tab)))
-         (unless (string= name "Default")
-           (let* ((tabs (funcall tab-bar-tabs-function))
-                  (tab-index (cl-position-if (lambda (t-obj) (string= (alist-get 'name t-obj) name)) tabs))
-                  (buffers (if tab-index
-                               (tabspaces--buffer-list nil (1+ tab-index))
-                             (tabspaces--buffer-list))))
-             (dolist (buf buffers)
-               (when (buffer-live-p buf)
-                 (let ((buf-name (buffer-name buf)))
-                   (unless (member buf-name '("*scratch*", "*Messages*"))
-                     (kill-buffer buf))))))))))
+  "Kill buffers unique to a tab when closing it."
+  (let ((name (cdr (assq 'name tab))))
+    (when (and name
+               (stringp name)
+               (not (string= name "Default"))
+               (not (get-buffer "*tabspaces--placeholder*")))
+      (let ((tab-index (my/find-tab-index name)))
+        (when tab-index
+          (let* ((tabs (funcall tab-bar-tabs-function))
+                 (buffers (tabspaces--buffer-list nil (1+ tab-index)))
+                 (other-tabs-buffers
+                  (cl-loop for idx from 0 below (length tabs)
+                           unless (= idx tab-index)
+                           append (tabspaces--buffer-list nil (1+ idx)))))
+            (dolist (buf buffers)
+              (when (buffer-live-p buf)
+                (let ((buf-name (buffer-name buf)))
+                  (unless (or (my/is-system-buffer-p buf-name)
+                              (member buf other-tabs-buffers))
+                    (kill-buffer buf)))))))))))
 
 (add-hook 'tab-bar-tab-prevent-close-functions
           (lambda (tab arg)
             (my/tabspaces-kill-buffers-before-close tab)
             nil))
-
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
