@@ -41,11 +41,13 @@
                                  'makefile-mode 'snippet-mode
                                  'ron-mode)
                           (eglot-ensure))))
-         ((markdown-mode markdown-ts-mode yaml-mode yaml-ts-mode) . eglot-ensure))
+         ((markdown-mode markdown-ts-mode yaml-mode yaml-ts-mode meson-mode meson-ts-mode) . eglot-ensure))
   :init (setq eglot-autoshutdown t
               eglot-events-buffer-config '(:size 0 :format 'short)
               eglot-send-changes-idle-time 0.5)
-  :config (setq read-process-output-max #x100000)) ; PERF: 1MB
+  :config (add-to-list 'eglot-server-programs
+                       '((meson-mode meson-ts-mode) . ("mesonlsp" "--lsp")))
+  (setq read-process-output-max #x100000)) ; PERF: 1MB
 
 (use-package consult-eglot
   :after eglot
