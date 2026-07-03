@@ -46,7 +46,13 @@
                                     'makefile-mode 'snippet-mode
                                     'ron-mode)
                              (eglot-ensure))))
+            (meson-mode . eglot-ensure)
+            (meson-ts-mode . eglot-ensure)
             ((markdown-mode yaml-mode yaml-ts-mode) . eglot-ensure))
+     :config (add-to-list 'eglot-server-programs
+                          '((meson-mode meson-ts-mode) . ("mesonlsp" "--lsp")))
+     (setq-default eglot-workspace-configuration
+                   '(:others (:neverDownloadAutomatically t)))
      :init (setq eglot-autoshutdown t
                  eglot-events-buffer-config '(:size 0 :format 'short)
                  eglot-send-changes-idle-time 0.5))
