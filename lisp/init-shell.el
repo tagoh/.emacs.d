@@ -121,7 +121,7 @@
     :hook (after-init . popterm-global-mode)
     :init
     (setq popterm-backend (if sys/win32p 'eshell 'ghostel)
-          popterm-scope 'project)))
+          popterm-scope 'dedicated)))
 
 (provide 'init-shell)
 
