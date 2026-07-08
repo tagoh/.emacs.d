@@ -114,14 +114,15 @@
 ;; Shell Pop
 (when emacs/>=29p
   (use-package popterm
+    :demand t  ; Required for tabspaces session restoration
     :functions childframe-workable-p
     :bind (("C-`"   . popterm-toggle)
-           ("C-M-`" . popterm-toggle-cd)
-           ([f9]    . popterm-window-toggle))
+           ("C-M-`" . popterm-toggle-cd))
     :hook (after-init . popterm-global-mode)
     :init
     (setq popterm-backend (if sys/win32p 'eshell 'ghostel)
           popterm-scope 'dedicated)))
+    ;; Note: F9 bound in custom.el for tab-specific instances
 
 (provide 'init-shell)
 
