@@ -143,7 +143,7 @@ Like normal Emacs `C-k'.  Kill to end of line and put content in kill-ring."
            ([f9]    . popterm-window-toggle))
     :hook (after-init . popterm-global-mode)
     :init (setq popterm-backend 'ghostel
-                popterm-scope 'project)))
+                popterm-scope 'dedicated)))
 
 (provide 'init-shell)
 

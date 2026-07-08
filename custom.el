@@ -299,6 +299,18 @@ for the image type)."
 ;; and worktrees with naming format: "project@branch"
 
 ;; Helper functions
+(defun my/add-project-tab-mapping (project-root tab-name)
+  "Add PROJECT-ROOT to TAB-NAME mapping without creating duplicates."
+  (let ((existing (assoc project-root tabspaces-project-tab-map)))
+    (if existing
+        ;; Update existing mapping if different
+        (unless (string= (cdr existing) tab-name)
+          (message "Updating tab mapping: %s -> %s (was %s)" project-root tab-name (cdr existing))
+          (setf (cdr existing) tab-name))
+      ;; Add new mapping
+      (message "Adding new tab mapping: %s -> %s" project-root tab-name)
+      (push (cons project-root tab-name) tabspaces-project-tab-map))))
+
 (defun my/get-all-tab-names ()
   "Get list of all tab names."
   (mapcar (lambda (tab) (alist-get 'name tab))
@@ -325,7 +337,7 @@ for the image type)."
       (tab-bar-switch-to-tab tab-name)
     (tab-bar-new-tab)
     (tab-bar-rename-tab tab-name)
-    (add-to-list 'tabspaces-project-tab-map (cons project-root tab-name))))
+    (my/add-project-tab-mapping project-root tab-name)))
 
 (defun my/kill-worktree-buffers (project-root)
   "Kill all buffers associated with PROJECT-ROOT worktree."
@@ -432,8 +444,7 @@ Optional WORKTREE-PATH for worktree-specific branch detection."
             ;; Create new tab
             (tab-bar-new-tab)
             (tab-bar-rename-tab expected-tab-name)
-            (add-to-list 'tabspaces-project-tab-map
-                         (cons project-root expected-tab-name)))
+            (my/add-project-tab-mapping project-root expected-tab-name))
           (setq-local project-current-directory project-root)))))
 
   (add-hook 'magit-post-display-buffer-hook #'my/magit-worktree-ensure-tabspace))
@@ -465,8 +476,7 @@ Optional WORKTREE-PATH for worktree-specific branch detection."
           ;; Tab doesn't exist: create and visit
           (tab-bar-new-tab)
           (tab-bar-rename-tab expected-tab-name)
-          (add-to-list 'tabspaces-project-tab-map
-                       (cons worktree-path expected-tab-name))
+          (my/add-project-tab-mapping worktree-path expected-tab-name)
           ;; Temporarily remove hook to prevent duplicate tab
           (remove-hook 'magit-post-display-buffer-hook
                        #'my/magit-worktree-ensure-tabspace)
@@ -528,8 +538,7 @@ Optional WORKTREE-PATH for worktree-specific branch detection."
                  (condition-case nil (magit-toplevel) (error nil)))
             ;; Git repository: use project@branch format
             (let ((tab-name (my/get-git-tab-name)))
-              (add-to-list 'tabspaces-project-tab-map
-                           (cons project-path tab-name))
+              (my/add-project-tab-mapping project-path tab-name)
               tab-name)
           ;; Not a git repo: use default behavior
           (funcall orig-fun project-path existing-tab-names)))))
@@ -549,7 +558,12 @@ Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
             (tab-bar-close-tab-by-name tab-name))))))
 
   (advice-add 'tabspaces-restore-session :after
-              (lambda (&rest _) (my/tabspaces-cleanup-placeholder-tabs))))
+              (lambda (&rest _)
+                (my/tabspaces-cleanup-placeholder-tabs)
+                ;; Clean up duplicate entries that may have been loaded
+                (when (boundp 'tabspaces-project-tab-map)
+                  (setq tabspaces-project-tab-map
+                        (delete-dups tabspaces-project-tab-map))))))
 
 (defun my/tabspaces-kill-buffers-before-close (tab)
   "Kill buffers unique to a tab when closing it."
@@ -648,6 +662,61 @@ Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
       (message "Tab: %s | Map: %s | API: %s | Projects: %s"
                tab root-map root-api projects)
       (my/treemacs-sync-with-tabspaces))))
+
+;; ============================================================================
+;; Popterm-tabspaces integration
+;; ============================================================================
+;; Create separate popterm buffers per tabspace session
+
+(with-eval-after-load 'popterm
+  (with-eval-after-load 'tabspaces
+    (defun my/popterm-restoring-session-p ()
+      "Check if tabspaces is currently restoring a session."
+      (get-buffer "*tabspaces--placeholder*"))
+
+    (defun my/popterm-buffer-name-with-tab (orig-fun &optional name backend)
+      "Inject current tab name into popterm buffer name for isolation per tab."
+      (funcall orig-fun
+               (if (and (not name)
+                       (not (my/popterm-restoring-session-p))
+                       (tabspaces--current-tab-name))
+                   (tabspaces--current-tab-name)
+                 name)
+               backend))
+
+    (defun my/popterm-filter-buffers-by-tab (orig-fun &optional backend)
+      "Filter popterm buffer list to only current tab's buffers."
+      (let ((all-bufs (funcall orig-fun backend)))
+        (if (my/popterm-restoring-session-p)
+            all-bufs
+          (let ((tab-name (tabspaces--current-tab-name)))
+            (if (not tab-name)
+                all-bufs
+              (cl-remove-if-not
+               (lambda (buf)
+                 (let ((inst (buffer-local-value 'popterm--buffer-instance-name buf)))
+                   (and inst (or (string= inst tab-name)
+                                (string-prefix-p (concat tab-name ":") inst)))))
+               all-bufs))))))
+
+    (defun my/popterm-sync-window-state (orig-fun &rest args)
+      "Sync popterm--window to actual visible window before toggle.
+Fixes duplicate window issue when switching between tabspace sessions."
+      (unless (my/popterm-restoring-session-p)
+        (when-let* ((tab-name (tabspaces--current-tab-name))
+                    (backend (or popterm-backend 'ghostel))
+                    (tag (pcase backend
+                           ('vterm "vterm") ('ghostel "ghostel") ('eat "eat")
+                           ('shell "shell") ('eshell "eshell")))
+                    (buf-name (format "*popterm-%s[%s]*" tag tab-name)))
+          (setq popterm--window
+                (cl-find-if (lambda (w) (string= (buffer-name (window-buffer w)) buf-name))
+                            (window-list)))))
+      (apply orig-fun args))
+
+    (advice-add 'popterm--buffer-name :around #'my/popterm-buffer-name-with-tab)
+    (advice-add 'popterm--buffer-list :around #'my/popterm-filter-buffers-by-tab)
+    (advice-add 'popterm-window-toggle :around #'my/popterm-sync-window-state)))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
