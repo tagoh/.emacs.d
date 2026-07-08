@@ -678,8 +678,8 @@ Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
       "Inject current tab name into popterm buffer name for isolation per tab."
       (funcall orig-fun
                (if (and (not name)
-                       (not (my/popterm-restoring-session-p))
-                       (tabspaces--current-tab-name))
+                        (not (my/popterm-restoring-session-p))
+                        (tabspaces--current-tab-name))
                    (tabspaces--current-tab-name)
                  name)
                backend))
@@ -696,12 +696,11 @@ Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
                (lambda (buf)
                  (let ((inst (buffer-local-value 'popterm--buffer-instance-name buf)))
                    (and inst (or (string= inst tab-name)
-                                (string-prefix-p (concat tab-name ":") inst)))))
+                                 (string-prefix-p (concat tab-name ":") inst)))))
                all-bufs))))))
 
-    (defun my/popterm-sync-window-state (orig-fun &rest args)
-      "Sync popterm--window to actual visible window before toggle.
-Fixes duplicate window issue when switching between tabspace sessions."
+    (defun my/popterm-sync-window-for-tab ()
+      "Sync popterm--window to match the current tab's popterm window."
       (unless (my/popterm-restoring-session-p)
         (when-let* ((tab-name (tabspaces--current-tab-name))
                     (backend (or popterm-backend 'ghostel))
@@ -709,14 +708,31 @@ Fixes duplicate window issue when switching between tabspace sessions."
                            ('vterm "vterm") ('ghostel "ghostel") ('eat "eat")
                            ('shell "shell") ('eshell "eshell")))
                     (buf-name (format "*popterm-%s[%s]*" tag tab-name)))
-          (setq popterm--window
-                (cl-find-if (lambda (w) (string= (buffer-name (window-buffer w)) buf-name))
-                            (window-list)))))
+          (let ((found-window
+                 (cl-find-if (lambda (w) (string= (buffer-name (window-buffer w)) buf-name))
+                             (window-list))))
+            ;; Update if we found current tab's window, or if current popterm--window
+            ;; is invalid or belongs to a different tab
+            (when (or found-window
+                      (not (and (boundp 'popterm--window)
+                                popterm--window
+                                (window-live-p popterm--window)
+                                (string= (buffer-name (window-buffer popterm--window)) buf-name))))
+              (setq popterm--window found-window))))))
+
+    (defun my/popterm-sync-window-state (orig-fun &rest args)
+      "Sync popterm--window to actual visible window before toggle."
+      (my/popterm-sync-window-for-tab)
       (apply orig-fun args))
+
+    (defun my/popterm-handle-tab-switch (&rest _)
+      "Sync popterm window state when switching tabs."
+      (my/popterm-sync-window-for-tab))
 
     (advice-add 'popterm--buffer-name :around #'my/popterm-buffer-name-with-tab)
     (advice-add 'popterm--buffer-list :around #'my/popterm-filter-buffers-by-tab)
-    (advice-add 'popterm-window-toggle :around #'my/popterm-sync-window-state)))
+    (advice-add 'popterm-window-toggle :around #'my/popterm-sync-window-state)
+    (add-hook 'tab-bar-tab-post-select-functions #'my/popterm-handle-tab-switch)))
 
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
@@ -733,5 +749,118 @@ Fixes duplicate window issue when switching between tabspace sessions."
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  )
+
+;; ============================================================================
+;; Tabspaces Session Restoration
+;; ============================================================================
+
+(with-eval-after-load 'tabspaces
+  ;; Treemacs buffer handler
+  (with-eval-after-load 'treemacs
+    (tabspaces-register-buffer-kind
+     'treemacs
+     (lambda (b)
+       (when (eq (buffer-local-value 'major-mode b) 'treemacs-mode)
+         (list :kind 'treemacs :dir (buffer-local-value 'default-directory b))))
+     (lambda (rec)
+       (when-let ((dir (plist-get rec :dir)))
+         (or (tabspaces-reuse-existing-buffer " *Treemacs-Buffer-No Tab")
+             (save-window-excursion
+               (let ((default-directory dir))
+                 (ignore-errors (treemacs) (current-buffer)))))))))
+
+  ;; Popterm buffer handler - creates tab-specific instances
+  (with-eval-after-load 'popterm
+    (defconst my/popterm-backend-tags
+      '((vterm . "vterm") (ghostel . "ghostel") (eat . "eat")
+        (shell . "shell") (eshell . "eshell")))
+
+    (defun my/popterm-buffer-name (backend tab-name)
+      "Generate popterm buffer name for BACKEND and TAB-NAME."
+      (format "*popterm-%s[%s]*"
+              (or (cdr (assq backend my/popterm-backend-tags)) "ghostel")
+              tab-name))
+
+    (defun my/popterm-get-project-dir (tab-name)
+      "Find project directory for TAB-NAME from multiple sources."
+      (or (car (rassoc tab-name tabspaces-project-tab-map))
+          (cl-loop for buf in (mapcar #'window-buffer (window-list))
+                   for proj = (with-current-buffer buf (project-current nil))
+                   when proj return (project-root proj))
+          (when-let ((project (project-current))) (project-root project))))
+
+    (defun my/popterm-set-directory (buf dir)
+      "Set BUF's directory to DIR and send cd command to terminal."
+      (with-current-buffer buf
+        (setq default-directory dir)
+        (when-let ((proc (get-buffer-process buf)))
+          (process-send-string proc (format "cd %s\n" (shell-quote-argument dir))))))
+
+    (tabspaces-register-buffer-kind
+     'popterm
+     (lambda (b)
+       (when (buffer-local-value 'popterm-mode b)
+         (list :kind 'popterm
+               :backend (buffer-local-value 'popterm-backend b)
+               :dir (buffer-local-value 'default-directory b))))
+     (lambda (rec)
+       (when-let* ((dir (plist-get rec :dir))
+                   ((file-directory-p dir))
+                   (tab-name (alist-get 'name (tab-bar--current-tab)))
+                   (backend (or (plist-get rec :backend) 'ghostel))
+                   (buf-name (my/popterm-buffer-name backend tab-name)))
+         (or (tabspaces-reuse-existing-buffer buf-name)
+             (let ((default-directory dir))
+               (ignore-errors
+                 (popterm--get-or-create tab-name backend)
+                 (when-let ((buf (get-buffer buf-name)))
+                   (my/popterm-set-directory buf dir)
+                   buf)))))))))
+
+;; ============================================================================
+;; Popterm per-tab toggle and layout fixes
+;; ============================================================================
+
+(with-eval-after-load 'popterm
+  (defun my/popterm-window-toggle-with-tab-name ()
+    "Toggle popterm in window with current tab name as instance."
+    (interactive)
+    (when-let ((tab-name (alist-get 'name (tab-bar--current-tab))))
+      (let* ((project-dir (my/popterm-get-project-dir tab-name))
+             (default-directory (or project-dir default-directory))
+             (popterm-display-method 'window))
+        (popterm-toggle tab-name popterm-backend)
+        (when project-dir
+          (when-let ((buf (get-buffer (my/popterm-buffer-name popterm-backend tab-name))))
+            (my/popterm-set-directory buf project-dir))))))
+
+  (global-set-key [f9] #'my/popterm-window-toggle-with-tab-name))
+
+(with-eval-after-load 'tabspaces
+  (defun my/tabspaces-save-session-preserve-layout (orig-fun &rest args)
+    "Preserve window layout when saving (workaround for side window issues)."
+    (let ((saved-layout (window-state-get (frame-root-window) t)))
+      (prog1 (apply orig-fun args)
+        (ignore-errors (window-state-put saved-layout (frame-root-window))))))
+
+  (defun my/tabspaces-fix-popterm-layout (&rest _)
+    "Fix popterm layout after restoration/tab switching."
+    (when-let* ((tab-name (alist-get 'name (tab-bar--current-tab)))
+                (project-dir (my/popterm-get-project-dir tab-name))
+                (popterm-buf (get-buffer (my/popterm-buffer-name popterm-backend tab-name))))
+      ;; Delete all popterm windows
+      (dolist (win (get-buffer-window-list popterm-buf nil t))
+        (unless (eq win (frame-root-window))
+          (ignore-errors (delete-window win))))
+      ;; Recreate at bottom with correct directory
+      (let ((default-directory project-dir)
+            (popterm-display-method 'window))
+        (ignore-errors (popterm-toggle tab-name popterm-backend)))
+      (my/popterm-set-directory popterm-buf project-dir)))
+
+  (advice-add 'tabspaces-save-session :around #'my/tabspaces-save-session-preserve-layout)
+  (advice-add 'tabspaces-restore-session :after #'my/tabspaces-fix-popterm-layout)
+  (advice-add 'tab-bar-select-tab :after #'my/tabspaces-fix-popterm-layout)
+  (advice-add 'tab-bar-select-tab-by-name :after #'my/tabspaces-fix-popterm-layout))
 
 ;;; custom.el ends here

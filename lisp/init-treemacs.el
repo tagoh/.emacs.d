@@ -35,6 +35,7 @@
 
 ;; A tree layout file explorer
 (use-package treemacs
+  :demand t  ; Required for tabspaces session restoration
   :functions (treemacs-follow-mode
               treemacs-filewatch-mode
               treemacs-git-mode
