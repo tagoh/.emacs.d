@@ -577,6 +577,78 @@ Fixes tabspaces bug where placeholder tabs aren't automatically cleaned up."
           (lambda (tab arg)
             (my/tabspaces-kill-buffers-before-close tab)
             nil))
+
+;; ============================================================================
+;; Treemacs-tabspaces integration
+;; ============================================================================
+
+(with-eval-after-load 'treemacs
+  (require 'treemacs-scope)
+
+  (defun my/treemacs-get-project-root-for-tab ()
+    "Get project root for current tabspaces tab."
+    (when-let* ((tab-name (alist-get 'name (tab-bar--current-tab)))
+                ((boundp 'tabspaces-project-tab-map))
+                (root (car (rassoc tab-name tabspaces-project-tab-map))))
+      (expand-file-name root)))
+
+  (defun my/treemacs-sync-with-tabspaces ()
+    "Sync treemacs to show the current project for the active tabspaces tab."
+    (condition-case err
+        (when-let* ((root (my/treemacs-get-project-root-for-tab))
+                    (workspace (treemacs-current-workspace))
+                    (window (treemacs-get-local-window))
+                    (buffer (window-buffer window)))
+          (let* ((projects (treemacs-workspace->projects workspace))
+                 (paths (mapcar #'treemacs-project->path projects)))
+            ;; Only sync if not already showing the correct single project
+            (unless (and (= 1 (length projects)) (string= root (car paths)))
+              ;; Remove mismatched projects
+              (dolist (project projects)
+                (unless (string= root (treemacs-project->path project))
+                  (treemacs-do-remove-project-from-workspace project t)))
+              ;; Add current project if missing
+              (unless (member root paths)
+                (treemacs-do-add-project-to-workspace
+                 root (file-name-nondirectory (directory-file-name root))))
+              ;; Pulse notification after brief delay for stability
+              (run-with-timer 0.1 nil
+                              (lambda (w b p)
+                                (when (and (window-live-p w) (buffer-live-p b))
+                                  (with-selected-window w
+                                    (goto-char (point-min))
+                                    (treemacs-pulse-on-success "Synced to %s" p))))
+                              window buffer (file-name-nondirectory (directory-file-name root))))))
+      (error (message "Treemacs sync error: %S" err))))
+
+  ;; Track last synced tab using closure to avoid global state
+  (let ((last-synced-tab nil))
+    (defun my/treemacs-handle-tab-switch (&rest _)
+      "Handle treemacs updates when switching tabspaces tabs."
+      (let ((current-tab (alist-get 'name (tab-bar--current-tab))))
+        (unless (equal current-tab last-synced-tab)
+          (setq last-synced-tab current-tab)
+          (run-with-idle-timer 0.3 nil #'my/treemacs-sync-with-tabspaces)))))
+
+  ;; Install hooks
+  (add-hook 'tab-bar-tab-post-select-functions #'my/treemacs-handle-tab-switch)
+  (advice-add 'treemacs :after
+              (lambda (&rest _) (run-with-idle-timer 0.3 nil #'my/treemacs-sync-with-tabspaces)))
+
+  ;; Manual sync for debugging
+  (defun my/treemacs-sync-debug ()
+    "Manually sync treemacs and show diagnostic info."
+    (interactive)
+    (let* ((tab (alist-get 'name (tab-bar--current-tab)))
+           (root-map (my/treemacs-get-project-root-for-tab))
+           (root-api (when-let ((p (project-current))) (expand-file-name (project-root p))))
+           (workspace (treemacs-current-workspace))
+           (projects (when workspace
+                       (mapcar #'treemacs-project->path (treemacs-workspace->projects workspace)))))
+      (message "Tab: %s | Map: %s | API: %s | Projects: %s"
+               tab root-map root-api projects)
+      (my/treemacs-sync-with-tabspaces))))
+
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
