@@ -128,6 +128,7 @@ prepended to the element after the #+HEADER: tag."
           ("j" "Journal" entry (file+olp+datetree
                                 ,(concat org-directory "/journal.org"))
            "*  %^{Title} %?\n%U\n%a\n" :clock-in t :clock-resume t)
+          ;; Status report templates "s" and "S" are added by org-status-report-setup
 	      ("b" "Book" entry (file+olp+datetree
                              ,(concat org-directory "/book.org"))
 	       "* Topic: %^{Description}  %^g %? Added: %U"))
@@ -223,6 +224,20 @@ prepended to the element after the #+HEADER: tag."
                                     "Display org modern agenda in GUI."
                                     (when (display-graphic-p)
                                       (org-modern-agenda)))))))
+
+;; Load status report package from local repository
+(use-package org-status-report
+  :load-path "/var/home/tagoh/work/repo/org-status-report"
+  :demand t
+  :custom
+  (org-status-week-start-day 2)
+  (org-status-second-half-days '(2 3))
+  (org-status-first-half-days '(4 5 1))
+  (org-status-second-half-label "Second Half (Tue-Wed)")
+  (org-status-first-half-label "First Half (Thu-Fri-Mon)")
+  (org-status-export-bullet-char "*")
+  :config
+  (org-status-report-setup))
 
 ;; Paste with org-mode markup and link
 (use-package org-rich-yank
