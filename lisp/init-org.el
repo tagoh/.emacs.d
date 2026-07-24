@@ -227,13 +227,6 @@ prepended to the element after the #+HEADER: tag."
 (use-package org-status-report
   :load-path "/var/home/tagoh/work/repo/org-status-report"
   :demand t
-  :custom
-  (org-status-week-start-day 2)
-  (org-status-second-half-days '(2 3))
-  (org-status-first-half-days '(4 5 1))
-  (org-status-second-half-label "Second Half (Tue-Wed)")
-  (org-status-first-half-label "First Half (Thu-Fri-Mon)")
-  (org-status-export-bullet-char "*")
   :config
   (org-status-report-setup))
 
