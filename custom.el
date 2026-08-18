@@ -336,4 +336,41 @@ for the image type)."
 (with-eval-after-load 'popterm
   (global-set-key [f9] #'tabspaces-ext-popterm-toggle))
 
+;; ============================================================================
+;; agent-shell: kill the ACP process tree when the shell buffer is killed
+;; ============================================================================
+;; `acp-shutdown' only calls `delete-process' when both the log and traffic
+;; buffers are still alive, so a per-session-limit error (which tears those
+;; buffers down) leaves `claude-agent-acp' running.  And even when it does
+;; fire, it SIGKILLs only the node wrapper, orphaning the `claude' SDK child
+;; it spawned.  Force-kill the whole tree ourselves, before the built-in
+;; cleanup reparents anything.
+
+(with-eval-after-load 'agent-shell
+  (defun my/kill-process-tree (pid)
+    "SIGKILL PID and all of its descendants, children first."
+    (dolist (child (split-string
+                    (shell-command-to-string (format "pgrep -P %d" pid))
+                    nil t))
+      (my/kill-process-tree (string-to-number child)))
+    (ignore-errors (signal-process pid 'SIGKILL)))
+
+  (defun my/agent-shell-kill-acp-process ()
+    "Force-kill the ACP client process tree for this agent-shell buffer."
+    (when (derived-mode-p 'agent-shell-mode)
+      (when-let* ((state  (ignore-errors (agent-shell--state)))
+                  (client (map-elt state :client))
+                  (proc   (map-elt client :process))
+                  ((process-live-p proc))
+                  (pid    (process-id proc)))
+        (my/kill-process-tree pid)
+        (ignore-errors (delete-process proc)))))
+
+  (add-hook 'agent-shell-mode-hook
+            (lambda ()
+              ;; Prepend (nil APPEND) so we run before `agent-shell--clean-up'
+              ;; while the parent/child process links are still intact.
+              (add-hook 'kill-buffer-hook
+                        #'my/agent-shell-kill-acp-process nil t))))
+
 ;;; custom.el ends here
