@@ -371,6 +371,8 @@ for the image type)."
               ;; Prepend (nil APPEND) so we run before `agent-shell--clean-up'
               ;; while the parent/child process links are still intact.
               (add-hook 'kill-buffer-hook
-                        #'my/agent-shell-kill-acp-process nil t))))
+                        #'my/agent-shell-kill-acp-process nil t)))
+  (setq agent-shell-google-authentication
+        (agent-shell-google-make-authentication :vertex-ai t)))
 
 ;;; custom.el ends here
