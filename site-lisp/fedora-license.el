@@ -7,7 +7,7 @@
 ;; (global-set-key (kdb "C-c M-l" 'license-validate-map))
 ;;
 (eval-after-load 'use-package
-  '(use-package "posframe"))
+  '(use-package posframe))
 
 (defvar license-validate-posframe-last-position nil)
 (defvar license-validate-map
