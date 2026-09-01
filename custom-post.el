@@ -28,5 +28,19 @@
   (advice-add 'tabspaces--session-auto-save :around
               #'my/tabspaces-auto-save-preserve-buffers))
 
+;; Stop `package-selected-packages' from being written into custom.el.
+;;
+;; Centaur overrides `package--save-selected-packages' (lisp/init-package.el)
+;; to suppress this, but Emacs 30.1+ moved the actual `customize-save-variable'
+;; call into a new helper, `package--save-selected-packages-1', which the
+;; outer override does not cover.  On a load-order path (package activation
+;; before the override installs) the real helper gets queued on
+;; `after-init-hook' and writes the list into custom.el.  Neutralize the
+;; writer itself so no path can persist it, matching Centaur's intent without
+;; editing any Centaur file.  `load-custom-post-file' runs ahead of the queued
+;; helper on `after-init-hook', so this override is in place before it fires.
+(when (fboundp 'package--save-selected-packages-1)
+  (advice-add 'package--save-selected-packages-1 :override #'ignore))
+
 (provide 'custom-post)
 ;;; custom-post.el ends here
