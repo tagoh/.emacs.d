@@ -291,6 +291,14 @@
   (tabspaces-ext-magit t)
   (tabspaces-ext-treemacs t)
   (tabspaces-ext-popterm t)
+  ;; Keep the global org-status-report journal out of every project's
+  ;; session file (it lives outside any project root, so the foreign-buffer
+  ;; filter can't catch it).
+  (tabspaces-ext-shared-buffers '("/org/status\\.org\\'"))
+  ;; Pin direction-sensitive commands to the current tab's project root so
+  ;; a global buffer (e.g. the status journal) being current can't send
+  ;; them to the wrong directory.
+  (tabspaces-ext-project-directory-commands '(agent-shell))
   :config
   (tabspaces-ext-mode 1))
 
