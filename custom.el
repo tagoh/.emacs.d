@@ -30,19 +30,6 @@
 ;; (setq desktop-base-file-name (format ".emacs-%s.desktop" emacs-major-version))
 ;; (setq desktop-base-lock-name (format ".emacs-%s.desktop.lock" emacs-major-version))
 
-(defun image-supported-file-p (file)
-  "Say whether Emacs has native support for displaying TYPE.
-The value is a symbol specifying the image type, or nil if type
-cannot be determined (or if Emacs doesn't have built-in support
-for the image type)."
-  (let ((case-fold-search t)
-        type)
-    (catch 'found
-      (dolist (elem image-type-file-name-regexps)
-	    (when (and (string-match-p (car elem) file)
-                   (image-type-available-p (setq type (cdr elem))))
-	      (throw 'found type))))))
-
 ;; Fonts
 (defun centaur-setup-fonts ()
   "Setup fonts."
@@ -312,22 +299,6 @@ for the image type)."
 ;; ============================================================================
 ;; Note: All tabspaces integrations (magit, treemacs, popterm) are handled
 ;; by the tabspaces-ext package and its modules
-
-(custom-set-variables
- ;; custom-set-variables was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- '(browse-url-browser-function 'browse-url-chrome)
- '(browse-url-chrome-program "google-chrome")
- '(safe-local-variable-values '((encoding . utf-8) (indent-tab-mode))))
-
-(custom-set-faces
- ;; custom-set-faces was added by Custom.
- ;; If you edit it by hand, you could mess it up, so be careful.
- ;; Your init file should contain only one such instance.
- ;; If there is more than one, they won't work right.
- )
 
 ;; ============================================================================
 ;; Popterm keybinding
