@@ -70,6 +70,13 @@
     ;;          return (progn
     ;;                   (setq face-font-rescale-alist `((,font . 1.3)))
     ;;                   (set-fontset-font t 'han (font-spec :family font))))
+
+    ;; Specify font for CJK (Japanese) characters
+    (cl-loop for font in '("Noto Sans CJK JP" "Noto Sans Mono CJK JP"
+                           "Source Han Sans JP" "IPAGothic" "VL Gothic")
+             when (font-available-p font)
+             return (dolist (charset '(han kana cjk-misc))
+                      (set-fontset-font t charset (font-spec :family font))))
     ))
 
 (centaur-setup-fonts)
