@@ -67,6 +67,16 @@
   (when (bound-and-true-p project-x-tabs-mode) (project-x-tabs-mode -1))
   (when (bound-and-true-p project-x-mode)      (project-x-mode -1))
 
+  ;; 1b. Repair `project-prefix-map'. project-x's mode-off handler
+  ;;     (project-x.el: "Turning mode OFF") unconditionally nils out the
+  ;;     d/r/w/j/a/l keys, but two of those are *stock* project.el bindings it
+  ;;     never owned. Restore them. Without this, tabspaces' project-switch
+  ;;     dispatch menu -- which infers keys from `project-prefix-map' via
+  ;;     `where-is-internal' -- loses "d" (Find directory), so pressing d in the
+  ;;     "Command in <project>:" menu does nothing.
+  (define-key project-prefix-map "d" 'project-find-dir)
+  (define-key project-prefix-map "r" 'project-query-replace-regexp)
+
   ;; 2. Revive tabspaces. Mirrors the pre-project-x lisp/init-workspace.el that
   ;;    upstream deletes; :ensure pulls it back in. `tabspaces-ext' (configured
   ;;    in custom.el with `:after tabspaces') activates when this loads it.
