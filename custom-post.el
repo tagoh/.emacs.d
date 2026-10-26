@@ -157,5 +157,21 @@
   (tabspaces-mode 1)
   (tab-bar-history-mode 1))
 
+;; Load the status report package from my local repository.
+;;
+;; This lives here rather than in lisp/init-org.el so that file stays
+;; byte-identical to Centaur upstream and never conflicts on rebase.
+;;
+;; Ordering is safe even though we run from `after-init-hook':
+;; `org-status-report' does `(require 'org)' at load time, which fires
+;; Centaur's deferred `org' :config (it sets `org-capture-templates')
+;; BEFORE this :config runs `org-status-report-setup', so the "s"/"S"
+;; capture templates are appended to the populated list, not clobbered.
+(use-package org-status-report
+  :load-path "/var/home/tagoh/work/repo/org-status-report"
+  :demand t
+  :config
+  (org-status-report-setup))
+
 (provide 'custom-post)
 ;;; custom-post.el ends here
