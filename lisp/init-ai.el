@@ -101,11 +101,17 @@
   (use-package agent-shell
     :custom
     (agent-shell-display-action '(display-buffer-reuse-window))
+    ;; Only build the authentication when a key is actually available.
+    ;; `agent-shell-deepseek-make-authentication' now errors on a nil
+    ;; :api-key, and because use-package defers :custom, that error fires
+    ;; lazily when `agent-shell' first loads and aborts the agent picker.
+    ;; Leaving the variable nil is supported: the ACP server then reads
+    ;; DEEPSEEK_API_KEY from the environment itself.
     (agent-shell-deepseek-authentication
-     (agent-shell-deepseek-make-authentication
-      :api-key (or (getenv "DEEPSEEK_API_KEY")
-                   (auth-source-pick-first-password
-                    :host "api.deepseek.com" :user "apikey"))))
+     (when-let* ((key (or (getenv "DEEPSEEK_API_KEY")
+                          (auth-source-pick-first-password
+                           :host "api.deepseek.com" :user "apikey"))))
+       (agent-shell-deepseek-make-authentication :api-key key)))
     :bind (("<f12>"      . agent-shell)
            ("<f13>"      . agent-shell)
            ("C-c a a"    . agent-shell)
